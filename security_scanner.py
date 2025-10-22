@@ -42,6 +42,7 @@ class SecurityScanner:
                         'severity': pattern_info['severity'],
                         'issue': check_name,
                         'description': pattern_info['description'],
+                        'filename': filename,
                         'line': line_num,
                         'code': context,
                         'matched': match,
@@ -50,11 +51,11 @@ class SecurityScanner:
 
         # Run language-specific checks
         if file_ext == '.py':
-            issues.extend(self._check_python_security(content))
+            issues.extend(self._check_python_security(content, filename))
         elif file_ext in ['.js', '.ts', '.jsx', '.tsx']:
-            issues.extend(self._check_javascript_security(content))
+            issues.extend(self._check_javascript_security(content, filename))
         elif file_ext in ['.sql']:
-            issues.extend(self._check_sql_security(content))
+            issues.extend(self._check_sql_security(content, filename))
 
         return issues
 
@@ -162,7 +163,7 @@ class SecurityScanner:
 
         return matches
 
-    def _check_python_security(self, content: str) -> List[Dict[str, Any]]:
+    def _check_python_security(self, content: str, filename: str = '') -> List[Dict[str, Any]]:
         """Python-specific security checks."""
         issues = []
 
@@ -173,6 +174,7 @@ class SecurityScanner:
                 'severity': 'high',
                 'issue': 'unsafe_pickle',
                 'description': 'Using pickle without safety considerations',
+                'filename': filename,
                 'recommendation': 'Validate pickle source, consider JSON or safer alternatives',
             })
 
@@ -183,12 +185,13 @@ class SecurityScanner:
                 'severity': 'medium',
                 'issue': 'missing_https',
                 'description': 'Flask app without HTTPS configuration',
+                'filename': filename,
                 'recommendation': 'Use SSL/TLS in production',
             })
 
         return issues
 
-    def _check_javascript_security(self, content: str) -> List[Dict[str, Any]]:
+    def _check_javascript_security(self, content: str, filename: str = '') -> List[Dict[str, Any]]:
         """JavaScript-specific security checks."""
         issues = []
 
@@ -199,6 +202,7 @@ class SecurityScanner:
                 'severity': 'high',
                 'issue': 'eval_usage',
                 'description': 'Use of eval() can lead to code injection',
+                'filename': filename,
                 'recommendation': 'Avoid eval(), use JSON.parse() or safer alternatives',
             })
 
@@ -209,12 +213,13 @@ class SecurityScanner:
                 'severity': 'medium',
                 'issue': 'innerHTML_xss',
                 'description': 'Using innerHTML can lead to XSS vulnerabilities',
+                'filename': filename,
                 'recommendation': 'Use textContent or sanitize HTML input',
             })
 
         return issues
 
-    def _check_sql_security(self, content: str) -> List[Dict[str, Any]]:
+    def _check_sql_security(self, content: str, filename: str = '') -> List[Dict[str, Any]]:
         """SQL-specific security checks."""
         issues = []
 
@@ -225,6 +230,7 @@ class SecurityScanner:
                 'severity': 'low',
                 'issue': 'select_star',
                 'description': 'SELECT * can expose sensitive data',
+                'filename': filename,
                 'recommendation': 'Explicitly specify columns needed',
             })
 

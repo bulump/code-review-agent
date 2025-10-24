@@ -240,12 +240,21 @@ def _display_security_results(issues, summary):
         console.print("[green]✓ No security issues detected[/green]\n")
         return
 
+    # Count issues by tool
+    tool_counts = {}
+    for issue in issues:
+        tool = issue.get('tool', 'unknown')
+        tool_counts[tool] = tool_counts.get(tool, 0) + 1
+
+    tools_used = ", ".join([f"{tool}: {count}" for tool, count in tool_counts.items()])
+
     # Summary
     console.print(Panel(
         f"[bold red]Critical:[/bold red] {summary['critical']}\n"
         f"[bold yellow]High:[/bold yellow] {summary['high']}\n"
         f"[bold cyan]Medium:[/bold cyan] {summary['medium']}\n"
-        f"[bold blue]Low:[/bold blue] {summary['low']}",
+        f"[bold blue]Low:[/bold blue] {summary['low']}\n\n"
+        f"[dim]Tools: {tools_used}[/dim]",
         title=f"Security Issues ({summary['total_issues']} total)",
         border_style="yellow"
     ))
@@ -258,11 +267,14 @@ def _display_security_results(issues, summary):
 
         for issue in critical_high[:10]:  # Limit to 10
             severity_color = "red" if issue['severity'] == 'critical' else "yellow"
-            console.print(f"[{severity_color}]●[/{severity_color}] [bold]{issue['issue']}[/bold]")
+            tool_badge = f"[dim cyan]\\[{issue.get('tool', 'unknown')}][/dim cyan] " if issue.get('tool') else ""
+            console.print(f"[{severity_color}]●[/{severity_color}] {tool_badge}[bold]{issue['issue']}[/bold]")
             console.print(f"  File: {issue.get('filename', 'N/A')}")
             if issue.get('line'):
                 console.print(f"  Line: {issue['line']}")
             console.print(f"  {issue['description']}")
+            if issue.get('confidence'):
+                console.print(f"  Confidence: {issue['confidence']}")
             console.print(f"  [dim]→ {issue['recommendation']}[/dim]\n")
 
 

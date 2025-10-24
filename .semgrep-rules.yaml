@@ -1,0 +1,168 @@
+rules:
+  # Python Security Rules
+  - id: hardcoded-password
+    pattern-either:
+      - pattern: password = "..."
+      - pattern: PASSWORD = "..."
+      - pattern: passwd = "..."
+    message: Hardcoded password detected
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      owasp: "A07:2021 - Identification and Authentication Failures"
+
+  - id: hardcoded-api-key
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = "sk_..."
+          - pattern: $VAR = "api_key_..."
+          - pattern: api_key = "..."
+          - pattern: API_KEY = "..."
+          - pattern: access_token = "..."
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: "(?i)(api|key|token|secret)"
+    message: Hardcoded API key or access token detected
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+
+  - id: sql-injection-concatenation
+    pattern-either:
+      - pattern: |
+          $QUERY = "..." + $INPUT + "..."
+      - pattern: |
+          $QUERY = f"...{$INPUT}..."
+      - pattern: |
+          $QUERY = "..." % $INPUT
+    message: Potential SQL injection via string formatting or concatenation
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+
+  - id: command-injection-os-system
+    pattern-either:
+      - pattern: os.system("..." + $VAR)
+      - pattern: os.system(f"...{$VAR}...")
+      - pattern: os.popen("..." + $VAR)
+      - pattern: os.popen(f"...{$VAR}...")
+    message: Command injection vulnerability via os.system or os.popen
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      cwe: "CWE-78: OS Command Injection"
+      owasp: "A03:2021 - Injection"
+
+  - id: subprocess-shell-injection
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.$FUNC(..., shell=True, ...)
+          - pattern: subprocess.$FUNC("..." + $VAR, ...)
+      - pattern-not: subprocess.$FUNC("...", shell=True)
+    message: Potential command injection with subprocess shell=True
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      cwe: "CWE-78: OS Command Injection"
+
+  - id: insecure-random-for-security
+    pattern-either:
+      - pattern: random.randint(...)
+      - pattern: random.choice(...)
+      - pattern: random.random(...)
+    message: Using insecure random module for security-sensitive operations. Use secrets module instead.
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      cwe: "CWE-330: Use of Insufficiently Random Values"
+
+  - id: unsafe-yaml-load
+    pattern-either:
+      - pattern: yaml.load($INPUT)
+      - pattern: yaml.load($INPUT, Loader=yaml.Loader)
+    message: Unsafe YAML deserialization. Use yaml.safe_load() instead.
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+
+  - id: unsafe-pickle
+    pattern: pickle.loads($INPUT)
+    message: Unsafe pickle deserialization can lead to arbitrary code execution
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+
+  - id: eval-injection
+    pattern-either:
+      - pattern: eval($INPUT)
+      - pattern: exec($INPUT)
+    message: Use of eval() or exec() can lead to arbitrary code execution
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+
+  - id: debug-mode-enabled
+    pattern-either:
+      - pattern: DEBUG = True
+      - pattern: app.debug = True
+      - pattern: app.run(..., debug=True, ...)
+    message: Debug mode enabled - should be disabled in production
+    severity: WARNING
+    languages:
+      - python
+
+  # JavaScript/TypeScript Security Rules
+  - id: js-eval-usage
+    pattern: eval($INPUT)
+    message: Use of eval() can lead to code injection vulnerabilities
+    severity: ERROR
+    languages:
+      - javascript
+      - typescript
+
+  - id: js-innerhtml-xss
+    pattern: $X.innerHTML = $INPUT
+    message: Using innerHTML with user input can lead to XSS vulnerabilities
+    severity: WARNING
+    languages:
+      - javascript
+      - typescript
+    metadata:
+      cwe: "CWE-79: Cross-site Scripting (XSS)"
+      owasp: "A03:2021 - Injection"
+
+  - id: js-document-write
+    pattern: document.write($INPUT)
+    message: document.write() with user input can lead to XSS
+    severity: WARNING
+    languages:
+      - javascript
+      - typescript
+
+  - id: js-sql-injection
+    patterns:
+      - pattern-either:
+          - pattern: $DB.query("..." + $INPUT + "...")
+          - pattern: $DB.execute("..." + $INPUT + "...")
+      - pattern-not: $DB.query("...")
+    message: Potential SQL injection via string concatenation
+    severity: ERROR
+    languages:
+      - javascript
+      - typescript

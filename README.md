@@ -4,9 +4,11 @@ AI-powered automated code review tool that analyzes pull requests for security v
 
 ## Features
 
-- **Security Analysis**: Detects common vulnerabilities (SQL injection, XSS, hardcoded secrets, etc.)
+- **Multi-Tool Security Analysis**: Integrates industry-standard tools (Semgrep, Bandit) plus custom pattern matching
+- **Comprehensive Coverage**: Detects SQL injection, XSS, hardcoded secrets, command injection, and more
 - **Code Quality**: Analyzes complexity, maintainability, and code smells
 - **AI-Powered Reviews**: Uses Claude to provide intelligent, context-aware feedback
+- **Custom Security Rules**: Includes tailored Semgrep rules for Python and JavaScript/TypeScript
 - **Best Practices**: Checks for language-specific patterns and conventions
 - **Actionable Feedback**: Provides specific suggestions with code examples
 - **GitHub Integration**: Can be run as CLI or GitHub Action
@@ -65,14 +67,17 @@ jobs:
 
 ## What It Checks
 
-### Security Issues
+### Security Issues (via Semgrep, Bandit, and Custom Patterns)
 - SQL injection vulnerabilities
 - Cross-site scripting (XSS)
-- Command injection
-- Hardcoded secrets/passwords
-- Insecure randomness
+- Command injection and shell injection
+- Hardcoded secrets/passwords/API keys
+- Insecure randomness (use of `random` instead of `secrets`)
 - Path traversal vulnerabilities
-- Insecure deserialization
+- Unsafe deserialization (pickle, YAML)
+- Use of `eval()` and `exec()`
+- Debug mode enabled in production
+- Weak cryptographic algorithms
 
 ### Code Quality
 - Cyclomatic complexity
@@ -92,9 +97,32 @@ jobs:
 
 ## Architecture
 
-- `code_review_agent.py`: Main CLI interface
+- `code_review_agent.py`: Main CLI interface with rich terminal output
 - `pr_analyzer.py`: GitHub PR fetcher and diff parser
-- `security_scanner.py`: Security vulnerability detection
-- `quality_analyzer.py`: Code quality metrics
+- `security_scanner.py`: Orchestrates security vulnerability detection
+- `tool_scanner.py`: Integrates external security tools (Semgrep, Bandit)
+- `quality_analyzer.py`: Code quality metrics and complexity analysis
 - `ai_reviewer.py`: Claude AI integration for intelligent reviews
-- `report_generator.py`: Formats and outputs review results
+- `.semgrep-rules.yaml`: Custom Semgrep security rules for Python and JavaScript/TypeScript
+
+## Security Tools Integration
+
+### Semgrep
+Custom rules detect:
+- SQL injection patterns
+- Command injection
+- Hardcoded credentials
+- Unsafe deserialization
+- XSS vulnerabilities (JavaScript/TypeScript)
+
+### Bandit
+Python-specific security scanner detecting:
+- CWE-categorized vulnerabilities
+- Security best practice violations
+- Confidence levels for each finding
+
+### Pattern Matcher
+Regex-based detection for:
+- Quick pattern-based scanning
+- Language-agnostic checks
+- Custom vulnerability patterns

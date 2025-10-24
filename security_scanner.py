@@ -5,6 +5,7 @@ Detects common security issues in code.
 import re
 from typing import List, Dict, Any
 from pathlib import Path
+from tool_scanner import ToolScanner
 
 
 class SecurityScanner:
@@ -13,6 +14,7 @@ class SecurityScanner:
     def __init__(self):
         """Initialize security scanner with vulnerability patterns."""
         self.patterns = self._init_patterns()
+        self.tool_scanner = ToolScanner()
 
     def scan_file(self, filename: str, content: str) -> List[Dict[str, Any]]:
         """
@@ -38,6 +40,7 @@ class SecurityScanner:
 
                 for line_num, match, context in matches:
                     issues.append({
+                        'tool': 'pattern-matcher',
                         'type': 'security',
                         'severity': pattern_info['severity'],
                         'issue': check_name,
@@ -56,6 +59,13 @@ class SecurityScanner:
             issues.extend(self._check_javascript_security(content, filename))
         elif file_ext in ['.sql']:
             issues.extend(self._check_sql_security(content, filename))
+
+        # Run tool-based security scans (semgrep, bandit)
+        if self.tool_scanner.is_available():
+            tool_results = self.tool_scanner.scan_file(filename, content)
+            # Flatten tool results into issues list
+            for tool_name, tool_issues in tool_results.items():
+                issues.extend(tool_issues)
 
         return issues
 
@@ -170,6 +180,7 @@ class SecurityScanner:
         # Check for pickle without safety
         if 'pickle' in content and 'safe' not in content.lower():
             issues.append({
+                'tool': 'pattern-matcher',
                 'type': 'security',
                 'severity': 'high',
                 'issue': 'unsafe_pickle',
@@ -181,6 +192,7 @@ class SecurityScanner:
         # Check for Flask without HTTPS
         if 'Flask' in content and 'ssl_context' not in content:
             issues.append({
+                'tool': 'pattern-matcher',
                 'type': 'security',
                 'severity': 'medium',
                 'issue': 'missing_https',
@@ -198,6 +210,7 @@ class SecurityScanner:
         # Check for eval usage
         if re.search(r'\beval\s*\(', content):
             issues.append({
+                'tool': 'pattern-matcher',
                 'type': 'security',
                 'severity': 'high',
                 'issue': 'eval_usage',
@@ -209,6 +222,7 @@ class SecurityScanner:
         # Check for innerHTML
         if re.search(r'\.innerHTML\s*=', content):
             issues.append({
+                'tool': 'pattern-matcher',
                 'type': 'security',
                 'severity': 'medium',
                 'issue': 'innerHTML_xss',
@@ -226,6 +240,7 @@ class SecurityScanner:
         # Check for SELECT *
         if re.search(r'SELECT\s+\*', content, re.IGNORECASE):
             issues.append({
+                'tool': 'pattern-matcher',
                 'type': 'security',
                 'severity': 'low',
                 'issue': 'select_star',

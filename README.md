@@ -12,6 +12,7 @@ AI-powered automated code review tool that analyzes pull requests for security v
 - **Best Practices**: Checks for language-specific patterns and conventions
 - **Actionable Feedback**: Provides specific suggestions with code examples
 - **GitHub Integration**: Can be run as CLI or GitHub Action
+- **Docker Support**: Fully containerized for easy deployment and consistent environments
 
 ## Installation
 
@@ -26,8 +27,8 @@ pip install -r requirements.txt
 No installation required! Just use Docker:
 
 ```bash
-# Pull from Docker Hub (coming soon)
-docker pull code-review-agent:latest
+# Pull from Docker Hub
+docker pull bulump/code-review-agent:latest
 
 # Or build locally
 docker build -t code-review-agent:latest .
@@ -66,13 +67,13 @@ docker run --rm \
   -w /workspace \
   -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
   -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
-  code-review-agent:latest review-files file1.py file2.py
+  bulump/code-review-agent:latest review-files file1.py file2.py
 
 # Review a GitHub pull request
 docker run --rm \
   -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
   -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
-  code-review-agent:latest review owner/repo 123
+  bulump/code-review-agent:latest review owner/repo 123
 
 # Review local repository
 docker run --rm \
@@ -80,7 +81,7 @@ docker run --rm \
   -w /workspace \
   -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
   -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
-  code-review-agent:latest review-local .
+  bulump/code-review-agent:latest review-local .
 ```
 
 **Docker Benefits:**
@@ -115,7 +116,7 @@ jobs:
             -w /workspace \
             -e ANTHROPIC_API_KEY \
             -e GITHUB_TOKEN \
-            code-review-agent:latest review ${{ github.repository }} ${{ github.event.pull_request.number }}
+            bulump/code-review-agent:latest review ${{ github.repository }} ${{ github.event.pull_request.number }}
 ```
 
 #### Option 2: Traditional Installation

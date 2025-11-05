@@ -1,0 +1,46 @@
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Git
+.git/
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files (users should provide their own)
+.env
+
+# Documentation (not needed in container)
+README.md
+QUICKSTART.md
+linkedin_post.md
+*.md
+
+# Demo/test files
+run_demo.sh
+test_*.py
+
+# GitHub workflows (not needed in container)
+.github/
+
+# Docker
+Dockerfile
+.dockerignore

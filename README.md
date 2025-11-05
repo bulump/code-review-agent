@@ -15,8 +15,22 @@ AI-powered automated code review tool that analyzes pull requests for security v
 
 ## Installation
 
+### Option 1: Local Installation
+
 ```bash
 pip install -r requirements.txt
+```
+
+### Option 2: Docker (Recommended)
+
+No installation required! Just use Docker:
+
+```bash
+# Pull from Docker Hub (coming soon)
+docker pull code-review-agent:latest
+
+# Or build locally
+docker build -t code-review-agent:latest .
 ```
 
 ## Configuration
@@ -43,9 +57,68 @@ python code_review_agent.py review-local /path/to/repo
 python code_review_agent.py review-files file1.py file2.py
 ```
 
+### Docker Mode
+
+```bash
+# Review specific files (mount current directory)
+docker run --rm \
+  -v $(pwd):/workspace \
+  -w /workspace \
+  -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+  -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+  code-review-agent:latest review-files file1.py file2.py
+
+# Review a GitHub pull request
+docker run --rm \
+  -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+  -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+  code-review-agent:latest review owner/repo 123
+
+# Review local repository
+docker run --rm \
+  -v /path/to/your/repo:/workspace \
+  -w /workspace \
+  -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+  -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+  code-review-agent:latest review-local .
+```
+
+**Docker Benefits:**
+- ✅ No dependency installation required
+- ✅ Consistent environment across all machines
+- ✅ Isolated from your local system
+- ✅ Easy CI/CD integration
+- ✅ Works on any OS with Docker
+
 ### GitHub Action
 
+#### Option 1: Using Docker (Faster, Cached)
+
 Add to `.github/workflows/code-review.yml`:
+
+```yaml
+name: AI Code Review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Code Review Agent (Docker)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            -e ANTHROPIC_API_KEY \
+            -e GITHUB_TOKEN \
+            code-review-agent:latest review ${{ github.repository }} ${{ github.event.pull_request.number }}
+```
+
+#### Option 2: Traditional Installation
 
 ```yaml
 name: AI Code Review

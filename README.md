@@ -4,13 +4,26 @@ AI-powered automated code review tool that analyzes pull requests for security v
 
 ## Recent Updates
 
+### Phase 3: Pre-existing Detection (September 2026)
+- ✅ **Intelligent Classification**: Distinguishes newly introduced issues from pre-existing technical debt
+- ✅ **Diff Analysis**: Parses git diffs and GitHub PR API to identify changed lines
+- ✅ **Smart Filtering**: Focus reviews on new issues, track debt separately
+- ✅ **Comprehensive Testing**: 5 automated tests, all passing
+
+### Phase 2: Multi-Reviewer Architecture (September 2026)
+- ✅ **Parallel Execution**: 5 specialized reviewers run concurrently (3-5x faster)
+- ✅ **Specialized Focus**: Security, Quality, Architecture, Testing, and Narrative reviewers
+- ✅ **AI-Powered Reviews**: 3 AI reviewers for architecture, testing, and PR coherence
+- ✅ **Enhanced Findings**: Reviewer attribution, confidence levels, origin tracking
+- ✅ **Comprehensive Testing**: 6 automated tests, all passing
+
 ### AWS Secret Detection (September 2026)
 - ✅ **Multi-Layered AWS Detection**: Pattern + context-aware + proximity-based detection
 - ✅ **Intelligent Verification**: Entropy analysis, test file filtering, comment exclusion
 - ✅ **Minimal False Positives**: SHA-1 hashes and test fixtures automatically filtered
 - ✅ **Comprehensive Coverage**: 6 automated tests, all passing
 
-### Phase 1 (September 2026)
+### Phase 1: Core Infrastructure (September 2026)
 - ✅ **AI Verification Layer**: Reduces false positives by 30-50% through intelligent validation
 - ✅ **Project-Aware Context**: Automatically loads CLAUDE.md, REVIEW.md, and language rules
 - ✅ **Security Hardening**: Path traversal prevention, sensitive file filtering, API key sanitization

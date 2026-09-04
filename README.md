@@ -379,29 +379,31 @@ TEST_AWS_KEY = "AKIAIOSFODNN7EXAMPLE"  # Excluded by verification
 
 ## Testing
 
-Run the test suite to validate functionality and security:
+The project uses **pytest** for comprehensive testing:
 
 ```bash
-# Test Phase 1 features
-python test_phase1.py
+# Run all tests (28 tests)
+pytest
 
-# Test verification layer
-python test_security_fixes.py
+# Run with verbose output
+pytest -v
 
-# Test AWS secret detection
-python test_aws_detection.py
+# Run in parallel (faster)
+pytest -n auto
 
-# Test on real PR (self-review)
-python test_real_pr.py
+# Run specific test file
+pytest test_phase2.py
+
+# Run specific test
+pytest test_phase2.py::test_finding_model
 ```
 
-**Test Coverage:**
-- ✅ Path traversal prevention (3 tests)
-- ✅ Sensitive file filtering (3 tests)
-- ✅ File size limits (1 test)
-- ✅ API key sanitization (2 tests)
-- ✅ Verification logic (5 tests)
-- ✅ Context loading (2 tests)
+**Test Coverage (28 tests, all passing):**
+- ✅ **Phase 1**: Verification layer and context loading (5 tests)
+- ✅ **Phase 2**: Multi-reviewer architecture (6 tests)
+- ✅ **Phase 3**: Pre-existing detection (5 tests)
+- ✅ **AWS Detection**: Context-aware secret detection with entropy filtering (6 tests)
+- ✅ **Security Fixes**: Path traversal, sanitization, validation (6 tests)
 - ✅ AWS secret detection (6 tests)
   - AWS Access Key ID pattern detection
   - Context-aware AWS Secret Key detection

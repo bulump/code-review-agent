@@ -21,6 +21,10 @@ from security_scanner import SecurityScanner
 from quality_analyzer import QualityAnalyzer
 from ai_reviewer import AIReviewer
 
+# Phase 2: Multi-Reviewer Architecture
+from reviewers.review_orchestrator import ReviewOrchestrator
+from issue_classifier import IssueClassifier
+
 # Load environment variables (.env file takes precedence over shell environment)
 load_dotenv(override=True)
 
@@ -38,8 +42,9 @@ def cli():
 @click.argument('pr_number', type=int)
 @click.option('--ai/--no-ai', default=True, help='Use AI-powered review')
 @click.option('--output', '-o', type=click.Path(), help='Save review to file')
-def review(repo, pr_number, ai, output):
-    """Review a GitHub pull request."""
+@click.option('--reviewers', help='Comma-separated list of reviewers (security,quality,architecture,testing,narrative)')
+def review(repo, pr_number, ai, output, reviewers):
+    """Review a GitHub pull request with Phase 2 multi-reviewer architecture."""
     console.print(f"\n[bold cyan]Reviewing PR #{pr_number} in {repo}[/bold cyan]\n")
 
     try:
@@ -64,87 +69,44 @@ def review(repo, pr_number, ai, output):
                 border_style="cyan"
             ))
 
-            # Security scan
-            task2 = progress.add_task("Scanning for security issues...", total=None)
-            security_scanner = SecurityScanner()
-            all_security_issues = []
+            # Phase 2: Multi-Reviewer Architecture
+            task2 = progress.add_task("Running parallel review...", total=None)
 
-            for file_data in pr_data['files']:
-                if file_data.get('content'):
-                    issues = security_scanner.scan_file(
-                        file_data['filename'],
-                        file_data['content']
-                    )
-                    all_security_issues.extend(issues)
+            # Determine which reviewers to run
+            if reviewers:
+                enabled_reviewers = [r.strip() for r in reviewers.split(',')]
+            elif ai:
+                enabled_reviewers = ['security', 'quality', 'architecture', 'testing', 'narrative']
+            else:
+                enabled_reviewers = ['security', 'quality']
 
-            security_summary = security_scanner.get_summary(all_security_issues)
+            # Run parallel review
+            orchestrator = ReviewOrchestrator(
+                enabled_reviewers=enabled_reviewers,
+                enable_verification=True
+            )
+
+            result = orchestrator.run_parallel_review(pr_data['files'], repo_path=None)
+            findings = result['findings']
+
+            # Phase 3: Classify pre-existing vs introduced
+            classifier = IssueClassifier()
+            diff_context = classifier.parse_pr_files(pr_data['files'])
+
+            for finding in findings:
+                finding.origin = classifier.classify_issue_origin(finding.to_dict(), diff_context)
+
             progress.remove_task(task2)
 
-            # Quality analysis
-            task3 = progress.add_task("Analyzing code quality...", total=None)
-            quality_analyzer = QualityAnalyzer()
-            all_quality_issues = []
+            # Display results using Phase 2 format
+            _display_phase2_results(findings, result['reviewer_results'])
 
-            for file_data in pr_data['files']:
-                if file_data.get('content'):
-                    metrics = quality_analyzer.analyze_file(
-                        file_data['filename'],
-                        file_data['content']
-                    )
-                    all_quality_issues.extend(metrics.get('issues', []))
-
-            progress.remove_task(task3)
-
-            # Display security results
-            _display_security_results(all_security_issues, security_summary)
-
-            # Display quality results
-            _display_quality_results(all_quality_issues)
-
-            # AI Review
-            if ai and (all_security_issues or all_quality_issues):
-                task4 = progress.add_task("Generating AI review...", total=None)
-                ai_reviewer = AIReviewer()
-
-                quality_summary = {
-                    'total_issues': len(all_quality_issues),
-                    'functions': sum(1 for i in all_quality_issues if 'function' in i.get('issue', '')),
-                    'lines_of_code': sum(f.get('additions', 0) for f in pr_data['files']),
-                }
-
-                review = ai_reviewer.review_changes(
-                    pr_data,
-                    all_security_issues,
-                    all_quality_issues
-                )
-
-                summary = ai_reviewer.generate_review_summary({
-                    'security_summary': security_summary,
-                    'quality_summary': quality_summary,
-                })
-
-                progress.remove_task(task4)
-
-                console.print("\n")
-                console.print(Panel(
-                    Markdown(summary),
-                    title="Review Summary",
-                    border_style="green"
-                ))
-
-                console.print("\n")
-                console.print(Panel(
-                    Markdown(review),
-                    title="AI-Powered Review",
-                    border_style="blue"
-                ))
-
-                # Save to file if requested
-                if output:
-                    full_review = f"{summary}\n\n{review}"
-                    with open(output, 'w') as f:
-                        f.write(full_review)
-                    console.print(f"\n[green]✓ Review saved to {output}[/green]")
+            # Save to file if requested
+            if output:
+                review_text = _format_findings_as_markdown(findings, pr_data)
+                with open(output, 'w') as f:
+                    f.write(review_text)
+                console.print(f"\n[green]✓ Review saved to {output}[/green]")
 
         console.print("\n[bold green]✓ Review complete![/bold green]\n")
 
@@ -196,42 +158,35 @@ def review_files(files):
 
 
 def _review_files(files):
-    """Common logic for reviewing a list of files."""
-    security_scanner = SecurityScanner()
-    quality_analyzer = QualityAnalyzer()
-
-    all_security_issues = []
-    all_quality_issues = []
-
+    """Common logic for reviewing a list of files (Phase 2)."""
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console
     ) as progress:
-        task = progress.add_task("Analyzing files...", total=len(files))
+        task = progress.add_task("Running parallel review...", total=None)
 
-        for file_data in files:
-            if file_data.get('content'):
-                # Security scan
-                sec_issues = security_scanner.scan_file(
-                    file_data['filename'],
-                    file_data['content']
-                )
-                all_security_issues.extend(sec_issues)
+        # Check if AI key is available
+        has_ai_key = bool(os.getenv('ANTHROPIC_API_KEY'))
+        if has_ai_key:
+            enabled_reviewers = ['security', 'quality', 'architecture', 'testing', 'narrative']
+        else:
+            enabled_reviewers = ['security', 'quality']
+            console.print("[yellow]⚠️  ANTHROPIC_API_KEY not set - AI reviewers disabled[/yellow]\n")
 
-                # Quality analysis
-                metrics = quality_analyzer.analyze_file(
-                    file_data['filename'],
-                    file_data['content']
-                )
-                all_quality_issues.extend(metrics.get('issues', []))
+        # Run Phase 2 parallel review
+        orchestrator = ReviewOrchestrator(
+            enabled_reviewers=enabled_reviewers,
+            enable_verification=True
+        )
 
-            progress.advance(task)
+        result = orchestrator.run_parallel_review(files, repo_path=None)
+        findings = result['findings']
 
-    # Display results
-    security_summary = security_scanner.get_summary(all_security_issues)
-    _display_security_results(all_security_issues, security_summary)
-    _display_quality_results(all_quality_issues)
+        progress.remove_task(task)
+
+    # Display results using Phase 2 format
+    _display_phase2_results(findings, result['reviewer_results'])
 
     console.print("\n[bold green]✓ Analysis complete![/bold green]\n")
 
@@ -320,6 +275,129 @@ def _display_quality_results(issues):
             console.print(f"  {issue['description']}")
             if issue.get('recommendation'):
                 console.print(f"  [dim]→ {issue['recommendation']}[/dim]\n")
+
+
+def _display_phase2_results(findings, reviewer_results):
+    """Display Phase 2 multi-reviewer results."""
+    # Reviewer summary
+    console.print("\n[bold cyan]📊 Multi-Reviewer Results[/bold cyan]\n")
+
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Reviewer", style="cyan")
+    table.add_column("Status", style="green")
+    table.add_column("Findings", justify="right")
+
+    for reviewer, stats in reviewer_results.items():
+        status_icon = "✓" if stats['status'] == 'completed' else "✗"
+        table.add_row(
+            reviewer,
+            f"{status_icon} {stats['status']}",
+            str(stats['findings_count'])
+        )
+
+    console.print(table)
+
+    if not findings:
+        console.print("\n[green]✓ No issues detected[/green]\n")
+        return
+
+    # Group findings by severity
+    by_severity = {}
+    for finding in findings:
+        severity = finding.severity
+        if severity not in by_severity:
+            by_severity[severity] = []
+        by_severity[severity].append(finding)
+
+    # Display summary panel
+    severity_order = ['critical', 'high', 'medium', 'low']
+    severity_counts = {s: len(by_severity.get(s, [])) for s in severity_order}
+
+    console.print(Panel(
+        f"[bold red]Critical:[/bold red] {severity_counts['critical']}\n"
+        f"[bold yellow]High:[/bold yellow] {severity_counts['high']}\n"
+        f"[bold cyan]Medium:[/bold cyan] {severity_counts['medium']}\n"
+        f"[bold blue]Low:[/bold blue] {severity_counts['low']}",
+        title=f"Findings Summary ({len(findings)} total)",
+        border_style="yellow"
+    ))
+
+    # Display findings by severity
+    for severity in severity_order:
+        if severity in by_severity:
+            severity_findings = by_severity[severity]
+
+            # Color code
+            colors = {
+                'critical': 'red',
+                'high': 'yellow',
+                'medium': 'cyan',
+                'low': 'blue'
+            }
+            color = colors.get(severity, 'white')
+
+            # Only show critical and high in detail
+            if severity in ['critical', 'high']:
+                console.print(f"\n[bold {color}]{severity.upper()} Severity Issues:[/bold {color}]\n")
+
+                for i, finding in enumerate(severity_findings[:10], 1):
+                    # Reviewer badge
+                    reviewer_badge = f"[dim cyan]\\[{finding.reviewer}][/dim cyan] " if finding.reviewer != 'unknown' else ""
+
+                    # Pre-existing indicator
+                    origin_badge = ""
+                    if finding.origin == 'pre-existing':
+                        origin_badge = " [dim yellow](pre-existing)[/dim yellow]"
+
+                    console.print(f"[{color}]●[/{color}] {reviewer_badge}[bold]{finding.issue}[/bold]{origin_badge}")
+                    console.print(f"  {finding.description}")
+                    console.print(f"  File: {finding.filename}{':' + str(finding.line) if finding.line else ''}")
+                    if finding.confidence != 'high':
+                        console.print(f"  Confidence: {finding.confidence}")
+                    console.print(f"  [dim]→ {finding.recommendation}[/dim]\n")
+
+                if len(severity_findings) > 10:
+                    console.print(f"  [dim]... and {len(severity_findings) - 10} more {severity} severity issues[/dim]\n")
+
+
+def _format_findings_as_markdown(findings, pr_data):
+    """Format findings as markdown for file output."""
+    lines = []
+    lines.append(f"# Code Review: {pr_data['title']}\n")
+    lines.append(f"**Author:** {pr_data['author']}")
+    lines.append(f"**Files Changed:** {pr_data['files_changed']}")
+    lines.append(f"**Changes:** +{pr_data['total_additions']} -{pr_data['total_deletions']}\n")
+
+    # Group by severity
+    by_severity = {}
+    for finding in findings:
+        severity = finding.severity
+        if severity not in by_severity:
+            by_severity[severity] = []
+        by_severity[severity].append(finding)
+
+    # Summary
+    lines.append("## Summary\n")
+    for severity in ['critical', 'high', 'medium', 'low']:
+        count = len(by_severity.get(severity, []))
+        if count > 0:
+            lines.append(f"- **{severity.capitalize()}:** {count}")
+
+    lines.append(f"\n**Total Findings:** {len(findings)}\n")
+
+    # Findings by severity
+    for severity in ['critical', 'high', 'medium', 'low']:
+        if severity in by_severity:
+            lines.append(f"## {severity.capitalize()} Severity Issues\n")
+
+            for i, finding in enumerate(by_severity[severity], 1):
+                origin = " *(pre-existing)*" if finding.origin == 'pre-existing' else ""
+                lines.append(f"### {i}. [{finding.reviewer}] {finding.issue}{origin}\n")
+                lines.append(f"**File:** {finding.filename}{':' + str(finding.line) if finding.line else ''}\n")
+                lines.append(f"**Description:** {finding.description}\n")
+                lines.append(f"**Recommendation:** {finding.recommendation}\n")
+
+    return "\n".join(lines)
 
 
 if __name__ == '__main__':

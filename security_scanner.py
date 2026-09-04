@@ -60,6 +60,9 @@ class SecurityScanner:
         elif file_ext in ['.sql']:
             issues.extend(self._check_sql_security(content, filename))
 
+        # Run AWS secrets proximity detection
+        issues.extend(self._check_aws_secrets_proximity(content, filename))
+
         # Run tool-based security scans (semgrep, bandit)
         if self.tool_scanner.is_available():
             tool_results = self.tool_scanner.scan_file(filename, content)
@@ -151,6 +154,22 @@ class SecurityScanner:
                 'recommendation': 'Implement CSRF protection for state-changing operations',
                 'multiline': True,
                 'extensions': ['.py'],
+            },
+            'aws_access_key_id': {
+                'pattern': r'(AKIA|ASIA|AIDA|AROA|AIPA|ANPA|ANVA|APKA)[A-Z0-9]{16}',
+                'severity': 'critical',
+                'description': 'AWS Access Key ID detected',
+                'recommendation': 'Never commit AWS credentials. Use IAM roles, instance profiles, or AWS Secrets Manager',
+                'multiline': False,
+                'extensions': ['*'],
+            },
+            'aws_secret_key_context': {
+                'pattern': r'(?i)(aws_secret|secret_access_key|aws.*secret)\s*=\s*["\']([A-Za-z0-9/+=]{40})["\']',
+                'severity': 'critical',
+                'description': 'AWS Secret Access Key detected (context-aware)',
+                'recommendation': 'Never commit AWS credentials. Use IAM roles, instance profiles, or AWS Secrets Manager',
+                'multiline': False,
+                'extensions': ['*'],
             },
         }
 
@@ -248,6 +267,55 @@ class SecurityScanner:
                 'filename': filename,
                 'recommendation': 'Explicitly specify columns needed',
             })
+
+        return issues
+
+    def _check_aws_secrets_proximity(self, content: str, filename: str = '') -> List[Dict[str, Any]]:
+        """
+        Proximity-based AWS secret detection.
+
+        Flags 40-character base64 strings that appear within 5 lines of an AWS Access Key ID.
+        This reduces false positives by requiring spatial correlation with known AWS artifacts.
+
+        Args:
+            content: File content
+            filename: File name
+
+        Returns:
+            List of AWS secret issues found via proximity analysis
+        """
+        issues = []
+        lines = content.split('\n')
+
+        # First pass: find AWS Access Key IDs
+        access_key_lines = set()
+        for i, line in enumerate(lines):
+            if re.search(r'(AKIA|ASIA|AIDA|AROA|AIPA|ANPA|ANVA|APKA)[A-Z0-9]{16}', line):
+                access_key_lines.add(i)
+
+        # Second pass: flag 40-char base64 strings near access keys
+        for i, line in enumerate(lines):
+            # Look for 40-character base64 strings
+            matches = re.finditer(r'[A-Za-z0-9/+=]{40}', line)
+
+            for match in matches:
+                # Check if within 5 lines of an access key
+                if any(abs(i - akl) <= 5 for akl in access_key_lines):
+                    # Additional check: not a hash function call
+                    if not re.search(r'(sha1|hash|digest|checksum)', line.lower()):
+                        issues.append({
+                            'tool': 'pattern-matcher',
+                            'type': 'security',
+                            'severity': 'critical',
+                            'issue': 'aws_secret_key_proximity',
+                            'description': 'Possible AWS Secret Access Key (found near AWS Access Key ID)',
+                            'filename': filename,
+                            'line': i + 1,
+                            'code': line.strip(),
+                            'matched': match.group(0),
+                            'recommendation': 'Never commit AWS credentials. Use IAM roles, instance profiles, or AWS Secrets Manager',
+                            'confidence': 'high',  # Higher confidence due to proximity
+                        })
 
         return issues
 

@@ -31,6 +31,41 @@ rules:
     metadata:
       cwe: "CWE-798: Use of Hard-coded Credentials"
 
+  - id: aws-access-key-id
+    pattern-regex: "(AKIA|ASIA|AIDA|AROA|AIPA|ANPA|ANVA|APKA)[A-Z0-9]{16}"
+    message: AWS Access Key ID detected - never commit AWS credentials
+    severity: ERROR
+    languages:
+      - generic
+    metadata:
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      owasp: "A07:2021 - Identification and Authentication Failures"
+      category: security
+
+  - id: aws-secret-access-key
+    patterns:
+      - pattern-either:
+          - pattern: $AWS_VAR = "$SECRET"
+          - pattern: $AWS_VAR = '$SECRET'
+      - metavariable-regex:
+          metavariable: $AWS_VAR
+          regex: "(?i)(aws_secret|secret_access_key|aws.*secret)"
+      - metavariable-regex:
+          metavariable: $SECRET
+          regex: "[A-Za-z0-9/+=]{40}"
+    message: AWS Secret Access Key detected - never commit AWS credentials
+    severity: ERROR
+    languages:
+      - python
+      - javascript
+      - typescript
+      - java
+      - go
+    metadata:
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      owasp: "A07:2021 - Identification and Authentication Failures"
+      category: security
+
   - id: sql-injection-concatenation
     pattern-either:
       - pattern: |

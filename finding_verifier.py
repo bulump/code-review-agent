@@ -97,6 +97,7 @@ class FindingVerifier:
         - "Missing DI registration" when it actually exists
         - "No error handling" when try/except is present
         - "Missing import" when import exists
+        - AWS secrets in test files or documentation
 
         Args:
             finding: Finding dictionary
@@ -109,6 +110,10 @@ class FindingVerifier:
 
         if not filename or not Path(filename).exists():
             return True  # Can't verify, let it through
+
+        # Check for AWS secret claims (special handling)
+        if 'aws' in description and ('secret' in description or 'access key' in description):
+            return self._verify_aws_secret_claim(finding)
 
         # Check for "missing" claims
         if 'missing' in description or 'no ' in description or 'not found' in description:
@@ -204,6 +209,91 @@ class FindingVerifier:
 
         # Be conservative - let most claims through
         return True
+
+    def _verify_aws_secret_claim(self, finding: Dict[str, Any]) -> bool:
+        """
+        Verify AWS secret detection isn't a false positive.
+
+        Filters out:
+        - Test files (test_, *_test.py, tests/)
+        - Example files (example, sample, demo)
+        - Documentation files (.md, .txt, docs/)
+        - Comments (lines starting with # or //)
+        - Low entropy strings (not actually random secrets)
+
+        Args:
+            finding: Finding dictionary
+
+        Returns:
+            True if claim is valid, False if likely false positive
+        """
+        filename = finding.get('filename', '').lower()
+
+        # Check 1: Test or example files
+        test_patterns = ['test_', '_test', '/tests/', '/test/', 'example', 'sample', 'demo', 'fixture']
+        if any(pattern in filename for pattern in test_patterns):
+            return False  # Likely a test fixture or example
+
+        # Check 2: Documentation files
+        doc_extensions = ['.md', '.txt', '.rst', '.adoc']
+        if any(filename.endswith(ext) for ext in doc_extensions) or '/docs/' in filename:
+            return False  # Documentation example
+
+        # Check 3: Check if it's in a comment
+        try:
+            line_num = finding.get('line')
+            if line_num:
+                with open(finding['filename'], 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                    if line_num <= len(lines):
+                        line_content = lines[line_num - 1].strip()
+                        # Check if line starts with comment markers
+                        if line_content.startswith('#') or line_content.startswith('//') or line_content.startswith('/*'):
+                            return False  # Comment/documentation
+        except Exception:
+            pass  # Can't check, continue
+
+        # Check 4: Entropy check for the matched secret value
+        matched = finding.get('matched', '')
+        if matched and len(matched) >= 20:
+            entropy = self._calculate_entropy(matched)
+            # Real AWS secrets have high entropy (>4.5 bits per character)
+            # Fake/test secrets often have low entropy (repeated patterns, dictionary words)
+            if entropy < 4.0:
+                return False  # Too low entropy for a real secret
+
+        return True  # Passes all checks, likely valid
+
+    def _calculate_entropy(self, s: str) -> float:
+        """
+        Calculate Shannon entropy of a string.
+
+        Higher entropy indicates more randomness (real secrets).
+        Lower entropy indicates patterns/repetition (test data).
+
+        Args:
+            s: String to analyze
+
+        Returns:
+            Entropy in bits per character
+        """
+        import math
+        from collections import Counter
+
+        if not s:
+            return 0.0
+
+        # Count character frequencies
+        counts = Counter(s)
+        length = len(s)
+
+        # Calculate Shannon entropy
+        entropy = 0.0
+        for count in counts.values():
+            probability = count / length
+            entropy -= probability * math.log2(probability)
+
+        return entropy
 
     def deduplicate_findings(self, findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """

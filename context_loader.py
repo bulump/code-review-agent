@@ -18,7 +18,8 @@ class ContextLoader:
         '.key', '.pem', '.p12',
         'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519',
         '.aws', '.ssh', '.gnupg', 'password.txt', 'token',
-        '.git', 'config'
+        '.git', 'config',
+        '.boto', '.s3cfg', 'aws-credentials'  # AWS-specific credential files
     }
 
     SENSITIVE_PATTERNS = {

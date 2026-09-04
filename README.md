@@ -4,11 +4,17 @@ AI-powered automated code review tool that analyzes pull requests for security v
 
 ## Recent Updates
 
+### AWS Secret Detection (September 2026)
+- ✅ **Multi-Layered AWS Detection**: Pattern + context-aware + proximity-based detection
+- ✅ **Intelligent Verification**: Entropy analysis, test file filtering, comment exclusion
+- ✅ **Minimal False Positives**: SHA-1 hashes and test fixtures automatically filtered
+- ✅ **Comprehensive Coverage**: 6 automated tests, all passing
+
 ### Phase 1 (September 2026)
 - ✅ **AI Verification Layer**: Reduces false positives by 30-50% through intelligent validation
 - ✅ **Project-Aware Context**: Automatically loads CLAUDE.md, REVIEW.md, and language rules
 - ✅ **Security Hardening**: Path traversal prevention, sensitive file filtering, API key sanitization
-- ✅ **Comprehensive Testing**: 16 automated tests covering features and security enhancements
+- ✅ **Comprehensive Testing**: 22 automated tests covering features and security enhancements
 
 ## Features
 
@@ -206,6 +212,10 @@ jobs:
 - Cross-site scripting (XSS)
 - Command injection and shell injection
 - Hardcoded secrets/passwords/API keys
+- **AWS Credentials Detection** (multi-layered with verification)
+  - AWS Access Key IDs (AKIA*, ASIA*, AIDA*, etc.)
+  - AWS Secret Access Keys (context-aware + proximity-based)
+  - Entropy-based filtering to reduce false positives
 - Insecure randomness (use of `random` instead of `secrets`)
 - Path traversal vulnerabilities
 - Unsafe deserialization (pickle, YAML)
@@ -297,10 +307,62 @@ The context loader and verification system include multiple security layers:
 
 **Example protected files:**
 ```
-.env, .env.local, .key, .pem, credentials, id_rsa, .ssh, .aws, password.txt, token
+.env, .env.local, .key, .pem, credentials, id_rsa, .ssh, .aws, .boto, .s3cfg, password.txt, token
 ```
 
 All file access goes through the `_is_safe_path()` validator in `context_loader.py`.
+
+### AWS Secret Detection
+
+Comprehensive multi-layered detection system for AWS credentials with intelligent false positive filtering:
+
+**Detection Strategies:**
+
+1. **Pattern Detection** - Direct pattern matching for AWS Access Key IDs:
+   - `AKIA*` - Long-term credentials
+   - `ASIA*` - Temporary credentials (STS)
+   - `AIDA*`, `AROA*`, `AIPA*`, `ANPA*`, `ANVA*`, `APKA*` - Other AWS identifiers
+
+2. **Context-Aware Detection** - 40-character base64 strings flagged only when:
+   - Variable name contains AWS-related keywords (`aws_secret`, `secret_access_key`, etc.)
+   - Example: `aws_secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCY..."`
+
+3. **Proximity Detection** - 40-character strings flagged when:
+   - Found within 5 lines of an AWS Access Key ID
+   - Not a hash function call (excludes `sha1`, `digest`, `checksum`)
+   - Higher confidence due to spatial correlation
+
+**Verification Layer** - Filters false positives by:
+- ❌ Excluding test files (`test_`, `*_test.py`, `/tests/`, `example`, `sample`, `demo`)
+- ❌ Excluding documentation (`.md`, `.txt`, `/docs/`)
+- ❌ Excluding comments (lines starting with `#`, `//`, `/*`)
+- ❌ Shannon entropy check (< 4.0 bits/char = low entropy = likely test data)
+
+**Example:**
+```python
+# ❌ DETECTED - High confidence
+AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"
+AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+
+# ❌ DETECTED - Context-aware
+config = {
+    'aws_secret': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
+}
+
+# ✅ NOT DETECTED - No AWS context
+commit_sha1 = "356a192b7913b04c54574d18c28d46e6395428ab"  # SHA-1 hash
+
+# ✅ FILTERED - Test file
+# File: test_credentials.py
+TEST_AWS_KEY = "AKIAIOSFODNN7EXAMPLE"  # Excluded by verification
+```
+
+**Results:**
+- High precision through multi-layered verification
+- Minimal false positives (SHA-1 hashes, test fixtures filtered)
+- High recall across different credential formats
+
+**Recommendation:** Use IAM roles, instance profiles, or AWS Secrets Manager instead of hardcoded credentials.
 
 ## Testing
 
@@ -313,6 +375,9 @@ python test_phase1.py
 # Test verification layer
 python test_security_fixes.py
 
+# Test AWS secret detection
+python test_aws_detection.py
+
 # Test on real PR (self-review)
 python test_real_pr.py
 ```
@@ -324,6 +389,13 @@ python test_real_pr.py
 - ✅ API key sanitization (2 tests)
 - ✅ Verification logic (5 tests)
 - ✅ Context loading (2 tests)
+- ✅ AWS secret detection (6 tests)
+  - AWS Access Key ID pattern detection
+  - Context-aware AWS Secret Key detection
+  - Proximity-based detection (5-line window)
+  - Verification filters test/example files
+  - Entropy-based filtering
+  - False positive prevention
 
 ## Architecture
 

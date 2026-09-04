@@ -392,10 +392,10 @@ pytest -v
 pytest -n auto
 
 # Run specific test file
-pytest test_phase2.py
+pytest tests/test_phase2.py
 
 # Run specific test
-pytest test_phase2.py::test_finding_model
+pytest tests/test_phase2.py::test_finding_model
 ```
 
 **Test Coverage (28 tests, all passing):**

@@ -3,6 +3,10 @@
 Code Review Agent
 AI-powered automated code review tool for pull requests.
 """
+import warnings
+# Suppress urllib3 NotOpenSSLWarning
+warnings.filterwarnings('ignore', message='urllib3 v2 only supports OpenSSL 1.1.1+')
+
 import click
 from rich.console import Console
 from rich.panel import Panel

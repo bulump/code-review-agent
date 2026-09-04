@@ -21,8 +21,8 @@ from security_scanner import SecurityScanner
 from quality_analyzer import QualityAnalyzer
 from ai_reviewer import AIReviewer
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (.env file takes precedence over shell environment)
+load_dotenv(override=True)
 
 console = Console()
 

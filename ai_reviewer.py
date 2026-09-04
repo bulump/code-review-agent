@@ -6,23 +6,86 @@ from anthropic import Anthropic
 import os
 import json
 from typing import Dict, List, Any
+from finding_verifier import FindingVerifier
+from context_loader import ContextLoader
+
+# Model configuration
+DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+MAX_TOKENS_FULL_REVIEW = 4000
+MAX_TOKENS_FILE_REVIEW = 2000
+MAX_TOKENS_SUGGESTION = 1000
 
 
 class AIReviewer:
     """AI-powered code reviewer using Claude."""
 
-    def __init__(self, api_key: str = None):
-        """Initialize AI reviewer with Anthropic API key."""
+    def __init__(self, api_key: str = None, enable_verification: bool = True):
+        """
+        Initialize AI reviewer with Anthropic API key.
+
+        Args:
+            api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
+            enable_verification: Enable finding verification to reduce false positives
+        """
         self.api_key = api_key or os.getenv('ANTHROPIC_API_KEY')
         if not self.api_key:
             raise ValueError("ANTHROPIC_API_KEY must be set")
+
+        # Validate API key format (basic check)
+        if not self._is_valid_api_key_format(self.api_key):
+            raise ValueError("Invalid API key format")
+
         self.client = Anthropic(api_key=self.api_key)
+
+        # Enhanced features
+        self.enable_verification = enable_verification
+        self.verifier = FindingVerifier() if enable_verification else None
+        self.context_loader = ContextLoader()
+
+    def _is_valid_api_key_format(self, key: str) -> bool:
+        """
+        Validate API key format without exposing the key.
+
+        Args:
+            key: API key to validate
+
+        Returns:
+            True if format is valid
+        """
+        # Anthropic keys typically start with 'sk-ant-' and are alphanumeric
+        return (
+            isinstance(key, str) and
+            len(key) > 20 and
+            key.startswith('sk-ant-')
+        )
+
+    def _sanitize_error(self, error: Exception) -> str:
+        """
+        Sanitize error messages to remove API keys.
+
+        Args:
+            error: Exception to sanitize
+
+        Returns:
+            Safe error message
+        """
+        error_str = str(error)
+
+        # Replace API key with redacted placeholder
+        if self.api_key and self.api_key in error_str:
+            error_str = error_str.replace(self.api_key, '[REDACTED_API_KEY]')
+
+        # Also redact anything that looks like an API key
+        import re
+        error_str = re.sub(r'sk-ant-[a-zA-Z0-9\-]+', '[REDACTED_API_KEY]', error_str)
+
+        return error_str
 
     def review_changes(self, pr_data: Dict[str, Any],
                       security_issues: List[Dict],
                       quality_issues: List[Dict]) -> str:
         """
-        Generate AI-powered code review.
+        Generate AI-powered code review with verification and context.
 
         Args:
             pr_data: Pull request data with file changes
@@ -32,17 +95,32 @@ class AIReviewer:
         Returns:
             Comprehensive review feedback
         """
-        prompt = self._build_review_prompt(pr_data, security_issues, quality_issues)
+        # Load project context
+        changed_files = [f['filename'] for f in pr_data.get('files', [])]
+        context = self.context_loader.load_context(changed_files)
 
-        message = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4000,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
+        # Verify findings if enabled
+        if self.enable_verification and self.verifier:
+            security_issues = self.verifier.verify_findings(security_issues)
+            quality_issues = self.verifier.verify_findings(quality_issues)
 
-        return message.content[0].text
+        # Build prompt with context
+        prompt = self._build_review_prompt(pr_data, security_issues, quality_issues, context)
+
+        try:
+            message = self.client.messages.create(
+                model=DEFAULT_MODEL,
+                max_tokens=MAX_TOKENS_FULL_REVIEW,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            return message.content[0].text
+
+        except Exception as e:
+            # Sanitize and re-raise
+            sanitized_msg = self._sanitize_error(e)
+            raise RuntimeError(f"AI review failed: {sanitized_msg}") from None
 
     def review_file(self, filename: str, content: str,
                    context: str = "") -> Dict[str, Any]:
@@ -57,10 +135,16 @@ class AIReviewer:
         Returns:
             Review feedback dictionary
         """
+        # Load project context
+        project_context = self.context_loader.load_context([filename])
+        context_section = self.context_loader.format_context_for_prompt(project_context)
+
         prompt = f"""You are an expert code reviewer. Review the following code file and provide feedback.
 
 File: {filename}
 {f"Context: {context}" if context else ""}
+
+{context_section}
 
 Code:
 ```
@@ -77,18 +161,23 @@ Provide a structured review covering:
 Focus on actionable, specific feedback with examples where helpful.
 """
 
-        message = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
+        try:
+            message = self.client.messages.create(
+                model=DEFAULT_MODEL,
+                max_tokens=MAX_TOKENS_FILE_REVIEW,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
 
-        return {
-            'filename': filename,
-            'review': message.content[0].text
-        }
+            return {
+                'filename': filename,
+                'review': message.content[0].text
+            }
+
+        except Exception as e:
+            sanitized_msg = self._sanitize_error(e)
+            raise RuntimeError(f"File review failed: {sanitized_msg}") from None
 
     def suggest_improvements(self, code_snippet: str, issue_type: str) -> str:
         """
@@ -115,20 +204,37 @@ Provide:
 Be concise but specific.
 """
 
-        message = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1000,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
+        try:
+            message = self.client.messages.create(
+                model=DEFAULT_MODEL,
+                max_tokens=MAX_TOKENS_SUGGESTION,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            return message.content[0].text
 
-        return message.content[0].text
+        except Exception as e:
+            sanitized_msg = self._sanitize_error(e)
+            raise RuntimeError(f"Suggestion generation failed: {sanitized_msg}") from None
 
     def _build_review_prompt(self, pr_data: Dict[str, Any],
                             security_issues: List[Dict],
-                            quality_issues: List[Dict]) -> str:
-        """Build comprehensive review prompt for AI."""
+                            quality_issues: List[Dict],
+                            context: Dict[str, str] = None) -> str:
+        """
+        Build comprehensive review prompt for AI.
+
+        Args:
+            pr_data: Pull request data
+            security_issues: Security issues found
+            quality_issues: Quality issues found
+            context: Project context (CLAUDE.md, REVIEW.md, rules)
+
+        Returns:
+            Formatted prompt string
+        """
+        context = context or {}
 
         # Summarize files changed
         files_summary = []
@@ -145,6 +251,9 @@ Be concise but specific.
         security_high = [i for i in security_issues if i.get('severity') == 'high']
         quality_medium_high = [i for i in quality_issues if i.get('severity') in ['high', 'medium']]
 
+        # Format project context
+        context_section = self.context_loader.format_context_for_prompt(context)
+
         prompt = f"""You are a senior software engineer performing a code review.
 
 Pull Request: {pr_data.get('title', 'Untitled')}
@@ -155,6 +264,8 @@ Total Changes: +{pr_data.get('total_additions', 0)} -{pr_data.get('total_deletio
 
 Files Modified:
 {json.dumps(files_summary, indent=2)}
+
+{context_section}
 
 Automated Analysis Found:
 - {len(security_critical)} Critical Security Issues
